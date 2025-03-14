@@ -12,7 +12,7 @@ from itertools import combinations
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
-from featureMaping import savePNG , createCSV
+from featureMaping import savePNG , createCSV , locateNans
 from expt2_feature_filtering import *
 #Danny Ruiz de Castilla 02.28.2025
 
@@ -72,6 +72,7 @@ def dimensionalityReduction(X , smiles):
     return pcaDict   , list(kmeansMAST.labels_)
 def findHighlights(smilesDict, partition1, chemistryDict):
     highlightDict = {}
+    hollowDict = {}
     to_remove = []
 
     for substrate, parameter in chemistryDict.items():
@@ -82,11 +83,18 @@ def findHighlights(smilesDict, partition1, chemistryDict):
             highlightDict[substrate] = [xPCA, yPCA]
             to_remove.append(substrate)
 
+        elif substrate in smilesDict and parameter < partition1: #hollow points
+            hollowX , hollowY = smilesDict[substrate]
+            hollowDict[substrate] = [hollowX , hollowY]
+            to_remove.append(substrate)
+        
+    
+
     # Remove keys after iteration to avoid modifying the dictionary while looping
     for key in to_remove:
         del smilesDict[key]
 
-    return highlightDict, smilesDict
+    return highlightDict, hollowDict , smilesDict
 
 
 def makePlots(pcaDict ,  partitionList , chemistryDicts  ,chemistryStr , colors , partitionStr):
@@ -94,13 +102,22 @@ def makePlots(pcaDict ,  partitionList , chemistryDicts  ,chemistryStr , colors 
     for partition in partitionList:
         #print("partition" , partition)
         for i , chemistryDict in enumerate(chemistryDicts): #this is the highlighted chemistry in the plot
-            highlightDict , smilesDict = findHighlights(pcaDict.copy()  ,  partition , chemistryDict )
-            #print(highlightDict)
-            try:
+            highlightDict , hollowDict , smilesDict = findHighlights(pcaDict.copy()  ,  partition , chemistryDict )
+
+
+            if len(highlightDict) != 0:
                 xHigh , yHigh = zip (*highlightDict.values())
                 colorScatter = True
-            except ValueError:
+            else:
                 colorScatter = False
+
+        
+            if len(hollowDict) != 0:
+                xHollow , yHollow = zip (*hollowDict.values())
+                hollowScatter = True
+            else:
+                hollowScatter = False
+
 
             xBland , yBland = zip(*smilesDict.values())
             chemistryLabel = chemistryStr[i]
@@ -113,6 +130,8 @@ def makePlots(pcaDict ,  partitionList , chemistryDicts  ,chemistryStr , colors 
             plt.scatter(list(xBland), list(yBland), c="grey", alpha=0.14 , s=10)
             if colorScatter:
                 plt.scatter(list(xHigh), list(yHigh), c=colors[i], alpha=0.7 , s=10)
+            if hollowScatter:
+                plt.scatter(list(xHollow), list(yHollow), facecolors='none', edgecolors=colors[i], alpha=0.7 , s=10)
             plt.xlabel(xLabel, fontsize=16, fontweight='bold', color='black')
             plt.ylabel(yLabel, fontsize=16, fontweight='bold', color='black')
             plt.title("Substrate Scope for " + str(chemistryLabel) + " at " + str(partition) + "%" + str(partitionStr), fontsize=18, fontweight='bold', color='navy')
@@ -143,17 +162,6 @@ def featureFiltering(outDir , X , feature_labels , featureStr):
             X, feature_labels  = spearmanr_correlation(X, feature_labels, threshold=0.95)
             #print("103" , type(X))
     return X , feature_labels
-def locateNans(df):
-    columns = df.columns.tolist()
-    nanDict = {}
-    for column in columns:
-        col = df[column]
-        indCol = col.isna().to_numpy().nonzero()[0]
-        if len(indCol) != 0:
-            #print("NANS" , indCol)
-            nanDict[str(column)] = list(indCol)
-
-    return nanDict
 def eliminateNans(df, nanDict):
     allNanRows = set()
     for key in nanDict.keys():
